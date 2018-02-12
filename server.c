@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "util.h"
 
 #define PORT 8765
 
@@ -15,6 +16,67 @@
 #define FMT_CLIENT_INFO "ECE568-SERVER: %s %s\n"
 #define FMT_OUTPUT "ECE568-SERVER: %s %s\n"
 #define FMT_INCOMPLETE_CLOSE "ECE568-SERVER: Incomplete shutdown\n"
+#define FMT_CN_MISMATCH "ECE568-SERVER: Client Common Name does not match\n"
+#define FMT_EMAIL_MISMATCH "ECE568-SERVER: Client Email does not match\n"
+
+void check_client_certificate(SSL *ssl) {
+	X509 *client;
+	char clientCN[BUFF_SIZE];
+	char clientEmail[BUFF_SIZE];
+	
+	client = SSL_get_peer_certificate(ssl);
+	
+	if (SSL_get_verify_result(ssl) != X509_V_OK) {
+		berr_exit(FMT_ACCEPT_ERR);
+		return 0;
+	}
+
+	X509_NAME_get_text_by_NID(X509_get_subject_name(client), NID_commonName, clientCN, BUFF_SIZE);
+	X509_NAME_get_text_by_NID(X509_get_subject_name(client), NID_pkcs9_emailAddress, clientEmail, BUFF_SIZE);
+
+	if (strcasecmp(clientCN, ALICE_CN)) {
+	    printf(clientCN);
+		printf(ALICE_CN);
+		berr_exit(FMT_CN_MISMATCH);
+		return 0;
+	}
+
+	if (strcasecmp(clientEmail, ALICE_EMAIL)) {
+		berr_exit(FMT_EMAIL_MISMATCH);
+		return 0;
+	}
+
+	printf(FMT_CLIENT_INFO, clientCN, clientEmail);
+}
+
+void handle_request(SSL *ssl, char *answer) {
+	check_client_certificate(ssl);
+
+	char buf[BUFF_SIZE];
+
+	int rc = SSL_read(ssl, buf, BUFF_SIZE);
+
+	switch (SSL_get_error(ssl, rc)) {
+		case SSL_ERROR_NONE:
+			buf[rc] = '\0';
+			break;
+		default:
+			berr_exit("SSL read has problem");
+	}
+
+	printf(FMT_OUTPUT, buf, answer);
+
+	rc = SSL_write(ssl, answer, strlen(answer));
+	switch (SSL_get_error(ssl, rc)) {
+		case SSL_ERROR_NONE:
+			if (strlen(answer) != rc) {
+				berr_exit("Incomplete write");
+			}
+			break;
+		default:
+			berr_exit("SSL write has problem");
+	}
+}
 
 int main(int argc, char **argv)
 {
@@ -22,6 +84,7 @@ int main(int argc, char **argv)
   struct sockaddr_in sin;
   int val=1;
   pid_t pid;
+  char *answer = "42";
   
   /*Parse command line arguments*/
   
@@ -46,6 +109,10 @@ int main(int argc, char **argv)
     exit(0);
   }
   
+  SSL_CTX *ctx = init_ctx(BOB_KEY_FILE, PASSWORD);
+  SSL_CTX_set_cipher_list(ctx, "SSLv2:SSLv3:TLSv1");
+  SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+
   memset(&sin,0,sizeof(sin));
   sin.sin_addr.s_addr=INADDR_ANY;
   sin.sin_family=AF_INET;
@@ -85,10 +152,30 @@ int main(int argc, char **argv)
       char buf[256];
       char *answer = "42";
 
-      len = recv(s, &buf, 255, 0);
-      buf[len]= '\0';
-      printf(FMT_OUTPUT, buf, answer);
-      send(s, answer, strlen(answer), 0);
+      BIO *sbio = BIO_new_socket(s, BIO_NOCLOSE);
+      SSL *ssl = SSL_new(ctx);
+      SSL_set_bio(ssl, sbio, sbio);
+
+      if (SSL_accept(ssl) <= 0) {
+        berr_exit(FMT_ACCEPT_ERR);
+        exit(0);
+      }
+
+      handle_request(ssl, answer);
+   
+      int rc = SSL_shutdown(ssl);
+
+      switch (rc) {
+        case 1:
+          break;
+
+        default:
+          shutdown(s, SHUT_WR);
+		  rc = SSL_shutdown(ssl);
+		  if (rc != 1) {
+			berr_exit(FMT_INCOMPLETE_CLOSE);
+		  }
+      }
       close(sock);
       close(s);
       return 0;

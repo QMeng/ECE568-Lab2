@@ -1,0 +1,18 @@
+#Qingsong Meng, 998383093, qingsong.meng@mail.utoronto.ca
+
+What I did to the following set of files to get the lab working:
+
+1. server.c
+Added code to initialize ctx with Bob's key file. Then set its cipher list and verify protocols. 
+In child process, added code to check the client's certificates, then read from the ssl connection and write back response. 
+After written back a response, close the SSL connection with the client. 
+
+2. client.c
+Added code to initialize ctx with Alice's key file. Then set its cipher list and options. 
+Added code to check the server's certificate, then send 1 message to the server, then read response from the server. 
+After receiving the response, close the SSL connection with the server. 
+
+3. util.c, util.h
+util.h is the header file of util.c which stores some common methods used by both server and client uses. 
+util.h also stores some commonly used values like Bob's common name and email, Alice's common name and email, etc. 
+util.c contains code for initializing ctx, destroying ctx, etc. 
