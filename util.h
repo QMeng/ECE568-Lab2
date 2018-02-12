@@ -34,7 +34,6 @@ extern BIO *bio_err;
 int err_exit(char *info);
 int berr_exit(char *info);
 SSL_CTX *init_ctx(char *keyFileName, char *password);
-void destroy_ctx(SSL_CTX *ctx);
 
 #ifndef ALLOW_OLD_VERSIONS
 #if (OPENSSL_VERSION_NUMBER < 0x00905100L)

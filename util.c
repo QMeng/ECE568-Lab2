@@ -57,7 +57,3 @@ SSL_CTX *init_ctx(char *keyFileName, char *password) {
 
 	return ctx;
 }
-
-void destroy_ctx(SSL_CTX *ctx) {
-	SSL_CTX_free(ctx);
-}
