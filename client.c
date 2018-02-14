@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 	BIO * sbio = BIO_new_socket(sock, BIO_NOCLOSE);
 	SSL_set_bio(ssl,sbio,sbio);
 
-	if (!(SSL_connect(ssl)>0)) {
+	if (SSL_connect(ssl)<=0) {
 		berr_exit(FMT_CONNECT_ERR);
 		goto cleanup;
 	}
